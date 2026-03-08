@@ -18,10 +18,10 @@ Build a production-ready React app that generates anime-style videos from text p
    - React Query for async state management (API calls).
 
 2. **Video Generation Backend/API Strategy**
-   - Use **Hugging Face Inference JS client** with open-source text-to-video models.
-   - Browser app calls inference with user-provided HF token.
+   - Use **OpenAI Video API** (`/v1/videos`) with Sora model options.
+   - Browser app calls OpenAI with user-provided API key.
    - Robust phase UX: submitting, rendering, success, error.
-   - Provider fallback behavior (`preferred provider -> auto`).
+   - Job polling workflow: create -> poll status -> download content.
 
 3. **Deployment**
    - GitHub Pages using `gh-pages` package and Vite relative base path.

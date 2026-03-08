@@ -1,21 +1,17 @@
-import type { InferenceProviderOrPolicy } from '@huggingface/inference';
-
 export type VideoModelOption = {
   id: string;
   label: string;
-  provider?: InferenceProviderOrPolicy;
   qualityHint: string;
 };
 
+export type VideoSizeOption = '720x1280' | '1280x720' | '1024x1792' | '1792x1024';
+
 export type VideoGenerationInput = {
-  token: string;
+  apiKey: string;
   prompt: string;
-  negativePrompt: string;
-  modelId?: string;
-  provider?: InferenceProviderOrPolicy;
-  numFrames: number;
-  guidanceScale: number;
-  seed?: number;
+  modelId: 'sora-2' | 'sora-2-pro';
+  seconds: '4' | '8' | '12';
+  size: VideoSizeOption;
 };
 
 export type GenerationPhase =

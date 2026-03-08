@@ -31,7 +31,7 @@ export function App() {
             <span className="bg-gradient-to-r from-fuchsia-300 via-sky-300 to-cyan-200 bg-clip-text text-transparent"> cinematic anime clips</span>
           </h1>
           <p className="max-w-3xl text-sm text-slate-200/85 md:text-base">
-            Powered by open-source models via Hugging Face Inference Providers. Use your own HF token and iterate fast with style-friendly controls.
+            Powered by OpenAI Video API. Use your OpenAI API key and generate anime-style scenes with Sora quality controls.
           </p>
         </motion.header>
 

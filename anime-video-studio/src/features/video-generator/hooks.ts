@@ -53,7 +53,7 @@ export function useVideoGenerator() {
       const result: GenerationResult = {
         id: crypto.randomUUID(),
         prompt: input.prompt,
-        modelId: input.modelId ?? 'auto',
+        modelId: input.modelId,
         createdAt: new Date().toISOString(),
         videoUrl: URL.createObjectURL(blob),
       };

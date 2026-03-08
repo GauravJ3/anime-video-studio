@@ -1,7 +1,7 @@
 import { Sparkles, WandSparkles } from 'lucide-react';
 import { useState } from 'react';
 import { MODEL_OPTIONS } from '../modelOptions';
-import type { VideoGenerationInput } from '../types';
+import type { VideoGenerationInput, VideoSizeOption } from '../types';
 import { PromptTips } from './PromptTips';
 
 type VideoGeneratorFormProps = {
@@ -9,14 +9,19 @@ type VideoGeneratorFormProps = {
   onSubmit: (value: VideoGenerationInput) => void;
 };
 
+const SIZE_OPTIONS: { value: VideoSizeOption; label: string }[] = [
+  { value: '720x1280', label: '720x1280 (portrait)' },
+  { value: '1280x720', label: '1280x720 (landscape)' },
+  { value: '1024x1792', label: '1024x1792 (portrait HD)' },
+  { value: '1792x1024', label: '1792x1024 (landscape HD)' },
+];
+
 export function VideoGeneratorForm({ disabled, onSubmit }: VideoGeneratorFormProps) {
-  const [token, setToken] = useState('');
+  const [apiKey, setApiKey] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('low quality, blurry, distorted anatomy');
-  const [modelId, setModelId] = useState(MODEL_OPTIONS[0].id);
-  const [numFrames, setNumFrames] = useState(49);
-  const [guidanceScale, setGuidanceScale] = useState(7.5);
-  const [seed, setSeed] = useState('');
+  const [modelId, setModelId] = useState<VideoGenerationInput['modelId']>('sora-2');
+  const [seconds, setSeconds] = useState<VideoGenerationInput['seconds']>('8');
+  const [size, setSize] = useState<VideoSizeOption>('1280x720');
 
   const selectedModel = MODEL_OPTIONS.find((model) => model.id === modelId) ?? MODEL_OPTIONS[0];
 
@@ -27,29 +32,26 @@ export function VideoGeneratorForm({ disabled, onSubmit }: VideoGeneratorFormPro
         event.preventDefault();
 
         onSubmit({
-          token,
+          apiKey,
           prompt,
-          negativePrompt,
-          modelId: modelId === '__auto__' ? undefined : modelId,
-          provider: modelId === '__auto__' ? undefined : selectedModel.provider,
-          numFrames,
-          guidanceScale,
-          seed: seed ? Number(seed) : undefined,
+          modelId,
+          seconds,
+          size,
         });
       }}
     >
       <div className="space-y-2">
-        <label className="field-label" htmlFor="hf-token">
-          Hugging Face API Token
+        <label className="field-label" htmlFor="openai-key">
+          OpenAI API Key
         </label>
         <input
           className="field-input"
-          id="hf-token"
-          onChange={(event) => setToken(event.target.value)}
-          placeholder="hf_xxxxxxxxxxxxxxxxx"
+          id="openai-key"
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder="sk-..."
           required
           type="password"
-          value={token}
+          value={apiKey}
         />
       </div>
 
@@ -69,7 +71,7 @@ export function VideoGeneratorForm({ disabled, onSubmit }: VideoGeneratorFormPro
 
       <PromptTips onSelect={setPrompt} />
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-3">
         <div className="space-y-2">
           <label className="field-label" htmlFor="model">
             Model
@@ -77,7 +79,7 @@ export function VideoGeneratorForm({ disabled, onSubmit }: VideoGeneratorFormPro
           <select
             className="field-input"
             id="model"
-            onChange={(event) => setModelId(event.target.value)}
+            onChange={(event) => setModelId(event.target.value as VideoGenerationInput['modelId'])}
             value={modelId}
           >
             {MODEL_OPTIONS.map((model) => (
@@ -90,63 +92,37 @@ export function VideoGeneratorForm({ disabled, onSubmit }: VideoGeneratorFormPro
         </div>
 
         <div className="space-y-2">
-          <label className="field-label" htmlFor="negative-prompt">
-            Negative Prompt
+          <label className="field-label" htmlFor="seconds">
+            Duration
           </label>
-          <input
+          <select
             className="field-input"
-            id="negative-prompt"
-            onChange={(event) => setNegativePrompt(event.target.value)}
-            value={negativePrompt}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className="space-y-2">
-          <label className="field-label" htmlFor="num-frames">
-            Frames
-          </label>
-          <input
-            className="field-input"
-            id="num-frames"
-            max={97}
-            min={17}
-            onChange={(event) => setNumFrames(Number(event.target.value))}
-            step={8}
-            type="number"
-            value={numFrames}
-          />
+            id="seconds"
+            onChange={(event) => setSeconds(event.target.value as VideoGenerationInput['seconds'])}
+            value={seconds}
+          >
+            <option value="4">4 seconds</option>
+            <option value="8">8 seconds</option>
+            <option value="12">12 seconds</option>
+          </select>
         </div>
 
         <div className="space-y-2">
-          <label className="field-label" htmlFor="guidance-scale">
-            Guidance
+          <label className="field-label" htmlFor="size">
+            Resolution
           </label>
-          <input
+          <select
             className="field-input"
-            id="guidance-scale"
-            max={15}
-            min={1}
-            onChange={(event) => setGuidanceScale(Number(event.target.value))}
-            step={0.5}
-            type="number"
-            value={guidanceScale}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="field-label" htmlFor="seed">
-            Seed (optional)
-          </label>
-          <input
-            className="field-input"
-            id="seed"
-            onChange={(event) => setSeed(event.target.value)}
-            placeholder="random"
-            type="number"
-            value={seed}
-          />
+            id="size"
+            onChange={(event) => setSize(event.target.value as VideoSizeOption)}
+            value={size}
+          >
+            {SIZE_OPTIONS.map((entry) => (
+              <option key={entry.value} value={entry.value}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

@@ -1,21 +1,22 @@
-import { InferenceClient, type InferenceProviderOrPolicy } from '@huggingface/inference';
 import type { VideoGenerationInput } from './types';
 
-const FALLBACK_MODEL_IDS = [
-  'Lightricks/LTX-Video',
-  'Wan-AI/Wan2.1-T2V-1.3B-Diffusers',
-  'genmo/mochi-1-preview',
-];
+type OpenAIVideoStatus = 'queued' | 'in_progress' | 'completed' | 'failed' | string;
 
-function toNegativeList(negativePrompt: string) {
-  return negativePrompt
-    .split(',')
-    .map((piece) => piece.trim())
-    .filter(Boolean);
-}
+type OpenAIVideoJob = {
+  id: string;
+  status: OpenAIVideoStatus;
+  progress?: number;
+  error?: {
+    message?: string;
+  };
+};
+
+const OPENAI_API_BASE = 'https://api.openai.com/v1';
+const MAX_POLLS = 90;
+const POLL_INTERVAL_MS = 3000;
 
 function buildAnimePrompt(prompt: string) {
-  return `${prompt}. anime film style, expressive characters, cinematic lighting, detailed environments, smooth motion, high quality.`;
+  return `${prompt}. anime cinematic style, expressive character animation, detailed backgrounds, dynamic camera movement, smooth motion, polished lighting.`;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -23,116 +24,81 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return 'Video generation failed. Try a different model or shorter prompt.';
+  return 'Video generation failed. Please try a different prompt or settings.';
 }
 
-async function runTextToVideo(params: {
-  client: InferenceClient;
-  token: string;
-  prompt: string;
-  negativePrompt: string;
-  model?: string;
-  provider?: InferenceProviderOrPolicy;
-  numFrames: number;
-  guidanceScale: number;
-  seed?: number;
-}) {
-  return params.client.textToVideo({
-    accessToken: params.token,
-    model: params.model,
-    provider: params.provider,
-    inputs: buildAnimePrompt(params.prompt),
-    parameters: {
-      negative_prompt: toNegativeList(params.negativePrompt),
-      num_frames: params.numFrames,
-      guidance_scale: params.guidanceScale,
-      num_inference_steps: 30,
-      seed: params.seed,
+async function createVideoJob(input: VideoGenerationInput): Promise<OpenAIVideoJob> {
+  const formData = new FormData();
+  formData.append('prompt', buildAnimePrompt(input.prompt));
+  formData.append('model', input.modelId);
+  formData.append('seconds', input.seconds);
+  formData.append('size', input.size);
+
+  const response = await fetch(`${OPENAI_API_BASE}/videos`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
     },
+    body: formData,
   });
-}
 
-async function resolveDefaultTextToVideoModel(token: string): Promise<string | null> {
-  try {
-    const response = await fetch('https://huggingface.co/api/tasks/text-to-video', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload = (await response.json()) as { widgetModels?: string[] };
-    if (Array.isArray(payload.widgetModels) && payload.widgetModels.length > 0) {
-      return payload.widgetModels[0];
-    }
-  } catch {
-    return null;
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `OpenAI video create failed (${response.status})`);
   }
 
-  return null;
+  return (await response.json()) as OpenAIVideoJob;
 }
 
-function uniqueModels(models: string[]): string[] {
-  return [...new Set(models.filter(Boolean))];
+async function retrieveVideoJob(videoId: string, apiKey: string): Promise<OpenAIVideoJob> {
+  const response = await fetch(`${OPENAI_API_BASE}/videos/${videoId}`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `OpenAI video status failed (${response.status})`);
+  }
+
+  return (await response.json()) as OpenAIVideoJob;
+}
+
+async function downloadVideoContent(videoId: string, apiKey: string): Promise<Blob> {
+  const response = await fetch(`${OPENAI_API_BASE}/videos/${videoId}/content`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `OpenAI video download failed (${response.status})`);
+  }
+
+  return response.blob();
 }
 
 export async function generateVideo(input: VideoGenerationInput): Promise<Blob> {
-  const client = new InferenceClient(input.token);
-  const resolvedDefaultModel = await resolveDefaultTextToVideoModel(input.token);
-  const modelCandidates = uniqueModels([
-    input.modelId ?? '',
-    resolvedDefaultModel ?? '',
-    ...FALLBACK_MODEL_IDS,
-  ]);
+  try {
+    let job = await createVideoJob(input);
 
-  if (modelCandidates.length === 0) {
-    throw new Error('No text-to-video models available at the moment.');
-  }
-
-  const baseRequest = {
-    client,
-    token: input.token,
-    prompt: input.prompt,
-    negativePrompt: input.negativePrompt,
-    numFrames: input.numFrames,
-    guidanceScale: input.guidanceScale,
-    seed: input.seed,
-  };
-
-  let lastError: unknown;
-
-  for (const model of modelCandidates) {
-    try {
-      const preferredBlob = await runTextToVideo({
-        ...baseRequest,
-        model,
-        provider: input.provider,
-      });
-
-      if (preferredBlob instanceof Blob) {
-        return preferredBlob;
+    for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
+      if (job.status === 'completed') {
+        return downloadVideoContent(job.id, input.apiKey);
       }
-    } catch (primaryError) {
-      lastError = primaryError;
+
+      if (job.status === 'failed') {
+        throw new Error(job.error?.message || 'OpenAI video generation failed.');
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS));
+      job = await retrieveVideoJob(job.id, input.apiKey);
     }
 
-    try {
-      const autoProviderBlob = await runTextToVideo({
-        ...baseRequest,
-        model,
-        provider: 'auto',
-      });
-
-      if (autoProviderBlob instanceof Blob) {
-        return autoProviderBlob;
-      }
-    } catch (fallbackError) {
-      lastError = fallbackError;
-    }
+    throw new Error('Video generation timed out. Please retry with shorter duration or lower resolution.');
+  } catch (error) {
+    throw new Error(toErrorMessage(error));
   }
-
-  throw new Error(toErrorMessage(lastError));
 }
