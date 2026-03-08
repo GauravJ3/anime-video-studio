@@ -43,7 +43,7 @@ Build a production-ready React app that generates anime-style videos from text p
 6. [x] Add local session history and output download behavior.
 7. [x] Add open-source component/library usage with attribution.
 8. [x] Add deployment config and documentation for GitHub Pages.
-9. [ ] Run validation (build/lint), then finalize git commit.
+9. [x] Run validation (build/lint), then finalize git commit.
 
 ## Progress Log
 - [x] Created initial implementation plan document.
@@ -51,7 +51,7 @@ Build a production-ready React app that generates anime-style videos from text p
 - [x] Implemented feature-based structure and anime video UI.
 - [x] Integrated Hugging Face text-to-video generation flow.
 - [x] Added deployment scripts and full README.
-- [ ] Run final checks and commit.
+- [x] Run final checks and commit.
 
 ## Notes / Risks
 - Text-to-video inference speed depends on provider capacity and model queue.
