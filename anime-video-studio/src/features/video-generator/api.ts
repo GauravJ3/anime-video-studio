@@ -1,6 +1,12 @@
 import { InferenceClient, type InferenceProviderOrPolicy } from '@huggingface/inference';
 import type { VideoGenerationInput } from './types';
 
+const FALLBACK_MODEL_IDS = [
+  'Lightricks/LTX-Video',
+  'Wan-AI/Wan2.1-T2V-1.3B-Diffusers',
+  'genmo/mochi-1-preview',
+];
+
 function toNegativeList(negativePrompt: string) {
   return negativePrompt
     .split(',')
@@ -46,8 +52,46 @@ async function runTextToVideo(params: {
   });
 }
 
+async function resolveDefaultTextToVideoModel(token: string): Promise<string | null> {
+  try {
+    const response = await fetch('https://huggingface.co/api/tasks/text-to-video', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as { widgetModels?: string[] };
+    if (Array.isArray(payload.widgetModels) && payload.widgetModels.length > 0) {
+      return payload.widgetModels[0];
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function uniqueModels(models: string[]): string[] {
+  return [...new Set(models.filter(Boolean))];
+}
+
 export async function generateVideo(input: VideoGenerationInput): Promise<Blob> {
   const client = new InferenceClient(input.token);
+  const resolvedDefaultModel = await resolveDefaultTextToVideoModel(input.token);
+  const modelCandidates = uniqueModels([
+    input.modelId ?? '',
+    resolvedDefaultModel ?? '',
+    ...FALLBACK_MODEL_IDS,
+  ]);
+
+  if (modelCandidates.length === 0) {
+    throw new Error('No text-to-video models available at the moment.');
+  }
+
   const baseRequest = {
     client,
     token: input.token,
@@ -58,42 +102,37 @@ export async function generateVideo(input: VideoGenerationInput): Promise<Blob> 
     seed: input.seed,
   };
 
-  try {
-    const preferredBlob = await runTextToVideo({
-      ...baseRequest,
-      model: input.modelId,
-      provider: input.provider,
-    });
+  let lastError: unknown;
 
-    if (preferredBlob instanceof Blob) {
-      return preferredBlob;
-    }
-  } catch (primaryError) {
+  for (const model of modelCandidates) {
     try {
-      const fallbackBlob = await runTextToVideo({
+      const preferredBlob = await runTextToVideo({
         ...baseRequest,
-        model: input.modelId,
-        provider: input.provider && input.provider !== 'auto' ? 'auto' : undefined,
+        model,
+        provider: input.provider,
       });
 
-      if (fallbackBlob instanceof Blob) {
-        return fallbackBlob;
+      if (preferredBlob instanceof Blob) {
+        return preferredBlob;
       }
-    } catch {
-      // Continue to default model routing fallback.
+    } catch (primaryError) {
+      lastError = primaryError;
     }
 
     try {
-      const defaultModelBlob = await runTextToVideo(baseRequest);
-      if (defaultModelBlob instanceof Blob) {
-        return defaultModelBlob;
-      }
-    } catch (defaultError) {
-      throw new Error(toErrorMessage(defaultError));
-    }
+      const autoProviderBlob = await runTextToVideo({
+        ...baseRequest,
+        model,
+        provider: 'auto',
+      });
 
-    throw new Error(toErrorMessage(primaryError));
+      if (autoProviderBlob instanceof Blob) {
+        return autoProviderBlob;
+      }
+    } catch (fallbackError) {
+      lastError = fallbackError;
+    }
   }
 
-  throw new Error('The model returned an unexpected response.');
+  throw new Error(toErrorMessage(lastError));
 }
