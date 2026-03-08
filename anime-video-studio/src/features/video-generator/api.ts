@@ -25,7 +25,7 @@ async function runTextToVideo(params: {
   token: string;
   prompt: string;
   negativePrompt: string;
-  model: string;
+  model?: string;
   provider?: InferenceProviderOrPolicy;
   numFrames: number;
   guidanceScale: number;
@@ -48,46 +48,48 @@ async function runTextToVideo(params: {
 
 export async function generateVideo(input: VideoGenerationInput): Promise<Blob> {
   const client = new InferenceClient(input.token);
+  const baseRequest = {
+    client,
+    token: input.token,
+    prompt: input.prompt,
+    negativePrompt: input.negativePrompt,
+    numFrames: input.numFrames,
+    guidanceScale: input.guidanceScale,
+    seed: input.seed,
+  };
 
   try {
     const preferredBlob = await runTextToVideo({
-      client,
-      token: input.token,
-      prompt: input.prompt,
-      negativePrompt: input.negativePrompt,
+      ...baseRequest,
       model: input.modelId,
       provider: input.provider,
-      numFrames: input.numFrames,
-      guidanceScale: input.guidanceScale,
-      seed: input.seed,
     });
 
     if (preferredBlob instanceof Blob) {
       return preferredBlob;
     }
   } catch (primaryError) {
-    if (!input.provider || input.provider === 'auto') {
-      throw new Error(toErrorMessage(primaryError));
-    }
-
     try {
       const fallbackBlob = await runTextToVideo({
-        client,
-        token: input.token,
-        prompt: input.prompt,
-        negativePrompt: input.negativePrompt,
+        ...baseRequest,
         model: input.modelId,
-        provider: 'auto',
-        numFrames: input.numFrames,
-        guidanceScale: input.guidanceScale,
-        seed: input.seed,
+        provider: input.provider && input.provider !== 'auto' ? 'auto' : undefined,
       });
 
       if (fallbackBlob instanceof Blob) {
         return fallbackBlob;
       }
-    } catch (fallbackError) {
-      throw new Error(toErrorMessage(fallbackError));
+    } catch {
+      // Continue to default model routing fallback.
+    }
+
+    try {
+      const defaultModelBlob = await runTextToVideo(baseRequest);
+      if (defaultModelBlob instanceof Blob) {
+        return defaultModelBlob;
+      }
+    } catch (defaultError) {
+      throw new Error(toErrorMessage(defaultError));
     }
 
     throw new Error(toErrorMessage(primaryError));

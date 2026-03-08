@@ -11,7 +11,7 @@ export type VideoGenerationInput = {
   token: string;
   prompt: string;
   negativePrompt: string;
-  modelId: string;
+  modelId?: string;
   provider?: InferenceProviderOrPolicy;
   numFrames: number;
   guidanceScale: number;

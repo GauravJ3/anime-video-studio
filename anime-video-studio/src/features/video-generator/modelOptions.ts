@@ -2,6 +2,12 @@ import type { VideoModelOption } from './types';
 
 export const MODEL_OPTIONS: VideoModelOption[] = [
   {
+    id: '__auto__',
+    label: 'Auto (HF recommended)',
+    provider: undefined,
+    qualityHint: 'Lets Hugging Face route to an available default text-to-video model.',
+  },
+  {
     id: 'Wan-AI/Wan2.1-T2V-1.3B-Diffusers',
     label: 'Wan 2.1 (1.3B, balanced)',
     provider: 'hf-inference',
